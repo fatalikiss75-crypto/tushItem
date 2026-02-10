@@ -1,0 +1,24 @@
+name: TushpItems
+version: '1.0-SNAPSHOT'
+main: com.example.tushpItems.TushpItems
+api-version: '1.21'
+author: YourName
+description: Плагин с трапками и станом
+
+commands:
+  tushpitempos1:
+    description: Установить первую позицию для трапки
+    usage: /tushpitempos1
+  tushpitempos2:
+    description: Установить вторую позицию для трапки
+    usage: /tushpitempos2
+  tushpitemsave:
+    description: Сохранить трапку
+    usage: /tushpitemsave <тип>
+  customtraps:
+    description: Открыть меню выбора скинов трапок
+    usage: /customtraps
+  tushpitem:
+    description: Получить предмет плагина (скины, стан, установщик)
+    usage: /tushpitem <тип>
+    aliases: [ti, titem]
