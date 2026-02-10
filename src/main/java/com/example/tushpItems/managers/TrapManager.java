@@ -150,7 +150,7 @@ public class TrapManager {
     }
 
     /**
-     * НОВЫЙ МЕТОД - Устанавливает трапку вокруг игрока (игрок в центре)
+     * НОВЫЙ МЕТОД - Устанавливает трапку вокруг игрока (игрок в центре наверху)
      */
     public void placeAutomaticTrap(Player player) {
         TrapSchematic schematic;
@@ -178,26 +178,41 @@ public class TrapManager {
             savedSchematics.put(player.getUniqueId(), newSchematic);
         }
 
-        // Вычисляем размеры трапки
+        // Вычисляем размеры трапки и находим min/max координаты
         int maxX = 0, maxY = 0, maxZ = 0;
+        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
         for (TrapSchematic.BlockInfo block : schematic.getBlocks()) {
             maxX = Math.max(maxX, block.x);
             maxY = Math.max(maxY, block.y);
             maxZ = Math.max(maxZ, block.z);
+            minX = Math.min(minX, block.x);
+            minY = Math.min(minY, block.y);
+            minZ = Math.min(minZ, block.z);
         }
 
-        // Центрируем трапку вокруг игрока
+        // Размеры трапки
+        int sizeX = maxX - minX + 1;
+        int sizeY = maxY - minY + 1;
+        int sizeZ = maxZ - minZ + 1;
+
+        // Позиция игрока - центр по X и Z
         Location playerLoc = player.getLocation();
-        Location origin = playerLoc.clone().subtract(maxX / 2.0, 0, maxZ / 2.0);
-        origin.setX(origin.getBlockX());
-        origin.setY(origin.getBlockY());
-        origin.setZ(origin.getBlockZ());
+
+        // Вычисляем origin так, чтобы игрок был в центре по X и Z
+        // origin = позиция_игрока - смещение_до_центра_трапки - минимальная_координата
+        double centerOffsetX = (sizeX - 1) / 2.0;
+        double centerOffsetZ = (sizeZ - 1) / 2.0;
+
+        Location origin = playerLoc.clone();
+        origin.setX(playerLoc.getBlockX() - minX - centerOffsetX);
+        origin.setY(playerLoc.getBlockY() - minY - sizeY + 1); // Трапка строится под игроком
+        origin.setZ(playerLoc.getBlockZ() - minZ - centerOffsetZ);
 
         // Спавним блоки
         schematic.paste(origin);
 
         // Регистрируем трапку
-        PlacedTrap trap = new PlacedTrap(origin, schematic, player.getUniqueId(), maxX, maxY, maxZ);
+        PlacedTrap trap = new PlacedTrap(origin, schematic, player.getUniqueId(), maxX, maxY, maxZ, minX, minY, minZ, sizeX, sizeY, sizeZ);
         placedTraps.put(origin, trap);
 
         // Запускаем эффекты
@@ -231,13 +246,20 @@ public class TrapManager {
 
         // Регистрируем трапку
         int maxX = 0, maxY = 0, maxZ = 0;
+        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
         for (TrapSchematic.BlockInfo block : schematic.getBlocks()) {
             maxX = Math.max(maxX, block.x);
             maxY = Math.max(maxY, block.y);
             maxZ = Math.max(maxZ, block.z);
+            minX = Math.min(minX, block.x);
+            minY = Math.min(minY, block.y);
+            minZ = Math.min(minZ, block.z);
         }
+        int sizeX = maxX - minX + 1;
+        int sizeY = maxY - minY + 1;
+        int sizeZ = maxZ - minZ + 1;
 
-        PlacedTrap trap = new PlacedTrap(location, schematic, player.getUniqueId(), maxX, maxY, maxZ);
+        PlacedTrap trap = new PlacedTrap(location, schematic, player.getUniqueId(), maxX, maxY, maxZ, minX, minY, minZ, sizeX, sizeY, sizeZ);
         placedTraps.put(location, trap);
 
         // Запускаем эффекты
@@ -294,13 +316,13 @@ public class TrapManager {
     }
 
     private boolean isNearTrap(Location playerLoc, Location trapOrigin, PlacedTrap trap) {
-        // Проверяем находится ли игрок внутри трапки
-        double minX = trapOrigin.getX() - 1;
-        double maxXBound = trapOrigin.getX() + trap.maxX + 1;
-        double minY = trapOrigin.getY() - 1;
-        double maxYBound = trapOrigin.getY() + trap.maxY + 1;
-        double minZ = trapOrigin.getZ() - 1;
-        double maxZBound = trapOrigin.getZ() + trap.maxZ + 1;
+        // Проверяем находится ли игрок внутри области трапки (с небольшим отступом)
+        double minX = trapOrigin.getX() + trap.getMinX() - 1;
+        double maxXBound = trapOrigin.getX() + trap.getMaxX() + 1;
+        double minY = trapOrigin.getY() + trap.getMinY() - 1;
+        double maxYBound = trapOrigin.getY() + trap.getMaxY() + 2; // +2 чтобы игрок наверху тоже попадал
+        double minZ = trapOrigin.getZ() + trap.getMinZ() - 1;
+        double maxZBound = trapOrigin.getZ() + trap.getMaxZ() + 1;
 
         return playerLoc.getX() >= minX && playerLoc.getX() <= maxXBound &&
                 playerLoc.getY() >= minY && playerLoc.getY() <= maxYBound &&
@@ -311,10 +333,10 @@ public class TrapManager {
         CooldownManager cdManager = plugin.getCooldownManager();
         TrapSkin skin = trap.getSchematic().getSkin();
 
-        // Телепортируем игрока в ЦЕНТР трапки
-        double centerX = trapOrigin.getX() + trap.maxX / 2.0;
-        double centerY = trapOrigin.getY();
-        double centerZ = trapOrigin.getZ() + trap.maxZ / 2.0;
+        // Телепортируем игрока в ЦЕНТР трапки по X/Z и на ВЕРХ по Y
+        double centerX = trapOrigin.getX() + trap.getMinX() + (trap.getSizeX() - 1) / 2.0 + 0.5;
+        double centerY = trapOrigin.getY() + trap.getMinY() + trap.getSizeY();
+        double centerZ = trapOrigin.getZ() + trap.getMinZ() + (trap.getSizeZ() - 1) / 2.0 + 0.5;
 
         Location centerLoc = new Location(trapOrigin.getWorld(), centerX, centerY, centerZ);
         centerLoc.setYaw(player.getLocation().getYaw());
@@ -460,18 +482,36 @@ public class TrapManager {
         private final TrapSchematic schematic;
         private final UUID owner;
         private final int maxX, maxY, maxZ;
+        private final int minX, minY, minZ;
+        private final int sizeX, sizeY, sizeZ;
 
-        public PlacedTrap(Location origin, TrapSchematic schematic, UUID owner, int maxX, int maxY, int maxZ) {
+        public PlacedTrap(Location origin, TrapSchematic schematic, UUID owner, int maxX, int maxY, int maxZ,
+                          int minX, int minY, int minZ, int sizeX, int sizeY, int sizeZ) {
             this.origin = origin;
             this.schematic = schematic;
             this.owner = owner;
             this.maxX = maxX;
             this.maxY = maxY;
             this.maxZ = maxZ;
+            this.minX = minX;
+            this.minY = minY;
+            this.minZ = minZ;
+            this.sizeX = sizeX;
+            this.sizeY = sizeY;
+            this.sizeZ = sizeZ;
         }
 
         public Location getOrigin() { return origin; }
         public TrapSchematic getSchematic() { return schematic; }
         public UUID getOwner() { return owner; }
+        public int getMaxX() { return maxX; }
+        public int getMaxY() { return maxY; }
+        public int getMaxZ() { return maxZ; }
+        public int getSizeX() { return sizeX; }
+        public int getSizeY() { return sizeY; }
+        public int getSizeZ() { return sizeZ; }
+        public int getMinX() { return minX; }
+        public int getMinY() { return minY; }
+        public int getMinZ() { return minZ; }
     }
 }
